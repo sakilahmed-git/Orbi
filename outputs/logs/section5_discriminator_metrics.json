@@ -92,8 +92,8 @@
       1019
     ],
     "seed_overlap_with_original_acceptance_seed_42": false,
-    "classical_mean_error_px_mean": 47.64983531380999,
-    "classical_mean_error_px_std": 3.2585193571771187,
+    "classical_mean_error_px_mean": 47.618495539991414,
+    "classical_mean_error_px_std": 3.169275172130055,
     "learned_mean_error_px_mean": 5.885595186853424,
     "learned_mean_error_px_std": 1.354555154211437,
     "n_scenarios": 20

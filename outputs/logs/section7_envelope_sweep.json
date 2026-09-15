@@ -127,7 +127,7 @@
     "clutter_level": 0.8,
     "noise_rate_hz_per_px": 8.0,
     "seed": 3011,
-    "mean_error_px": 4.461614347298451,
+    "mean_error_px": 4.46161434729845,
     "hit_rate": 1.0,
     "success": 1
   },
@@ -149,7 +149,7 @@
     "clutter_level": 0.1,
     "noise_rate_hz_per_px": 5.0,
     "seed": 3013,
-    "mean_error_px": 5.641617651202721,
+    "mean_error_px": 5.641617651202719,
     "hit_rate": 1.0,
     "success": 1
   },
@@ -160,7 +160,7 @@
     "clutter_level": 0.1,
     "noise_rate_hz_per_px": 8.0,
     "seed": 3014,
-    "mean_error_px": 5.298563377030275,
+    "mean_error_px": 5.298563377030274,
     "hit_rate": 1.0,
     "success": 1
   },
@@ -215,7 +215,7 @@
     "clutter_level": 0.1,
     "noise_rate_hz_per_px": 5.0,
     "seed": 3019,
-    "mean_error_px": 5.761326026414705,
+    "mean_error_px": 5.761326026414704,
     "hit_rate": 1.0,
     "success": 1
   },
@@ -237,7 +237,7 @@
     "clutter_level": 0.8,
     "noise_rate_hz_per_px": 1.0,
     "seed": 3021,
-    "mean_error_px": 5.8476061036986335,
+    "mean_error_px": 5.847606103698635,
     "hit_rate": 1.0,
     "success": 1
   },
@@ -325,7 +325,7 @@
     "clutter_level": 0.8,
     "noise_rate_hz_per_px": 8.0,
     "seed": 3029,
-    "mean_error_px": 6.668702389212673,
+    "mean_error_px": 6.6687023892126716,
     "hit_rate": 1.0,
     "success": 0
   },
@@ -347,7 +347,7 @@
     "clutter_level": 0.1,
     "noise_rate_hz_per_px": 5.0,
     "seed": 3031,
-    "mean_error_px": 7.234600004813249,
+    "mean_error_px": 7.23460000481325,
     "hit_rate": 1.0,
     "success": 0
   },
