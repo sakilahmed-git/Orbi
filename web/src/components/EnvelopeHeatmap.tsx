@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchEnvelopeSweep, EnvelopeSweepResponse } from "@/lib/api";
 
 function colorFor(p: number): string {
-  // Low success -> bad red, high success -> good green, via the accent hue for the mid-band.
+  // Absence/failure is orange; present/high-confidence acquisition is signal blue.
   const r = Math.round(255 * (1 - p) + 79 * p);
-  const g = Math.round(93 * (1 - p) + 213 * p);
-  const b = Math.round(93 * (1 - p) + 152 * p);
+  const g = Math.round(106 * (1 - p) + 166 * p);
+  const b = Math.round(61 * (1 - p) + 255 * p);
   return `rgb(${r},${g},${b})`;
 }
 
@@ -105,7 +105,7 @@ export default function EnvelopeHeatmap() {
           <span>0.0 success</span>
           <div
             className="h-2 flex-1"
-            style={{ background: "linear-gradient(90deg, rgb(255,93,93), rgb(79,213,152))" }}
+            style={{ background: "linear-gradient(90deg, #ff6a3d, #4fa6ff)" }}
           />
           <span>1.0 success</span>
         </div>

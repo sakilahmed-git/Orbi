@@ -4,3 +4,12 @@ venv/
 .env
 node_modules/
 .next/
+.chrome-profile/
+.chrome-profile-verify/
+.matplotlib-cache/
+.browser_verify.out
+.browser_verify.err
+__pycache__/
+*.pyc
+.next/
+node_modules/

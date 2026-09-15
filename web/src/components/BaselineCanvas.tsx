@@ -7,11 +7,13 @@ export default function BaselineCanvas({
   width,
   height,
   label,
+  caption,
 }: {
   pixels: number[] | null;
   width: number;
   height: number;
   label: string;
+  caption?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -51,6 +53,7 @@ export default function BaselineCanvas({
         className="w-full aspect-square border border-panel-border bg-[#04060a]"
       />
       <p className="mt-2 text-xs font-mono text-text-dim">{label}</p>
+      {caption && <p className="mt-1 text-xs leading-relaxed text-text-dim">{caption}</p>}
     </div>
   );
 }

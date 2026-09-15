@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -45,6 +45,35 @@ export default function LiveDemo() {
     disturbance_armed: ControlComparisonSide;
   } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const pendingCanvasRef = useRef<{
+    points?: EventPoint[];
+    pixels?: number[];
+    dims?: { width: number; height: number };
+  }>({});
+  const animationFrameRef = useRef<number | null>(null);
+
+  const flushCanvas = useCallback(() => {
+    const pending = pendingCanvasRef.current;
+    if (pending.points) setEventPoints(pending.points);
+    if (pending.pixels && pending.dims) {
+      setBaselinePixels(pending.pixels);
+      setBaselineDims(pending.dims);
+    }
+    pendingCanvasRef.current = {};
+    animationFrameRef.current = null;
+  }, []);
+
+  const queueCanvas = useCallback((update: typeof pendingCanvasRef.current) => {
+    Object.assign(pendingCanvasRef.current, update);
+    if (animationFrameRef.current === null) {
+      animationFrameRef.current = requestAnimationFrame(flushCanvas);
+    }
+  }, [flushCanvas]);
+
+  useEffect(() => () => {
+    wsRef.current?.close();
+    if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
+  }, []);
 
   const runDemo = useCallback(() => {
     wsRef.current?.close();
@@ -56,6 +85,11 @@ export default function LiveDemo() {
     setDominantFreq(null);
     setConfidence(null);
     setComparison(null);
+    pendingCanvasRef.current = {};
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
 
     let ws: WebSocket;
     try {
@@ -82,10 +116,9 @@ export default function LiveDemo() {
     ws.onmessage = (evt) => {
       const msg: StreamMessage = JSON.parse(evt.data);
       if (msg.type === "events") {
-        setEventPoints(msg.points);
+        queueCanvas({ points: msg.points });
       } else if (msg.type === "baseline_frame") {
-        setBaselinePixels(msg.pixels);
-        setBaselineDims({ width: msg.width, height: msg.height });
+        queueCanvas({ pixels: msg.pixels, dims: { width: msg.width, height: msg.height } });
       } else if (msg.type === "disturbance") {
         setDominantFreq(msg.dominant_frequency_hz);
         setConfidence(msg.confidence);
@@ -105,7 +138,9 @@ export default function LiveDemo() {
       setStatus("error");
       setErrorMsg("Connection to the backend failed. Is the API running?");
     };
-  }, [form]);
+  }, [form, queueCanvas]);
+
+  const baselineCaption = baselinePixels ? describeBaselineFrame(baselinePixels) : undefined;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-12">
@@ -117,7 +152,7 @@ export default function LiveDemo() {
         physical sensor feed.
       </p>
 
-      <div className="grid md:grid-cols-4 gap-4 mb-8 border border-panel-border bg-panel p-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 border border-panel-border bg-panel p-4 sm:p-5 shadow-[0_18px_60px_rgba(0,0,0,0.16)]">
         <Field
           label="Vibration freq (Hz)"
           value={form.vibration_freq_hz}
@@ -150,11 +185,11 @@ export default function LiveDemo() {
           max={9999}
           step={1}
         />
-        <div className="md:col-span-4 flex items-center gap-4 pt-2">
+        <div className="col-span-2 md:col-span-4 flex flex-wrap items-center gap-3 pt-2 border-t border-panel-border/70 mt-1">
           <button
             onClick={runDemo}
             disabled={status === "connecting" || status === "running"}
-            className="px-5 py-2 bg-accent text-[#150a05] text-sm font-medium disabled:opacity-50 hover:brightness-110 transition"
+            className="rounded-sm border border-accent bg-accent px-5 py-2.5 text-sm font-semibold text-[#150a05] shadow-[0_0_22px_rgba(255,106,61,0.18)] transition hover:brightness-110 hover:shadow-[0_0_28px_rgba(255,106,61,0.28)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {status === "running" || status === "connecting" ? "Running…" : "Run scenario"}
           </button>
@@ -175,6 +210,7 @@ export default function LiveDemo() {
           width={baselineDims.width}
           height={baselineDims.height}
           label="Conventional frame-camera baseline (30fps)"
+          caption={baselineCaption}
         />
       </div>
 
@@ -193,6 +229,7 @@ export default function LiveDemo() {
                       dataKey="frequency_hz"
                       stroke="#8794a8"
                       tick={{ fontSize: 11 }}
+                      tickFormatter={formatFrequencyTick}
                       label={{ value: "Hz", position: "insideBottomRight", fill: "#8794a8", fontSize: 11 }}
                     />
                     <YAxis stroke="#8794a8" tick={{ fontSize: 11 }} />
@@ -219,13 +256,16 @@ export default function LiveDemo() {
             Settle-time comparison{comparison ? "" : " — awaiting result"}
           </h2>
           {comparison ? (
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <ComparisonColumn title="Fixed-gain baseline" side={comparison.baseline} />
-              <ComparisonColumn
-                title="Disturbance-armed"
-                side={comparison.disturbance_armed}
-                highlight
-              />
+            <div>
+              <ComparisonHighlight comparison={comparison} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <ComparisonColumn title="Fixed-gain baseline" side={comparison.baseline} />
+                <ComparisonColumn
+                  title="Disturbance-armed"
+                  side={comparison.disturbance_armed}
+                  highlight
+                />
+              </div>
             </div>
           ) : (
             <div className="h-48 flex items-center justify-center text-xs text-text-dim">
@@ -254,7 +294,7 @@ function Field({
   step: number;
 }) {
   return (
-    <label className="flex flex-col gap-1.5">
+    <label className="flex min-w-0 flex-col gap-1.5">
       <span className="text-xs text-text-dim">{label}</span>
       <input
         type="number"
@@ -263,7 +303,7 @@ function Field({
         max={max}
         step={step}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="bg-bg border border-panel-border px-2.5 py-1.5 text-sm font-mono focus-visible:outline-2 focus-visible:outline-accent-2"
+        className="w-full rounded-sm border border-panel-border bg-bg px-3 py-2 text-sm font-mono text-text shadow-inner shadow-black/20 transition placeholder:text-text-dim/50 hover:border-text-dim focus:border-accent-2 focus:outline-none focus:ring-2 focus:ring-accent-2/20"
       />
     </label>
   );
@@ -291,7 +331,7 @@ function ComparisonColumn({
   highlight?: boolean;
 }) {
   return (
-    <div className={highlight ? "border-l-2 border-accent pl-3" : "pl-3 border-l-2 border-transparent"}>
+    <div className={highlight ? "border-l-2 border-accent-2 pl-3" : "pl-3 border-l-2 border-transparent"}>
       <p className="text-xs text-text-dim mb-2">{title}</p>
       <dl className="space-y-1.5 font-mono text-xs">
         <Row label="RMS error" value={`${side.rms_error_px.toFixed(2)} px`} />
@@ -312,4 +352,73 @@ function Row({ label, value }: { label: string; value: string }) {
       <dd>{value}</dd>
     </div>
   );
+}
+
+function formatFrequencyTick(value: number | string) {
+  const frequency = Number(value);
+  return Number.isFinite(frequency) ? frequency.toFixed(0) : "";
+}
+
+function describeBaselineFrame(pixels: number[]) {
+  const sorted = [...pixels].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length * 0.5)] ?? 0;
+  const p99 = sorted[Math.floor(sorted.length * 0.99)] ?? median;
+  const contrast = Math.max(0, p99 - median);
+  if (contrast < 18) {
+    return `This frame's 99th-percentile signal is only ${contrast} grayscale levels above its median background: the beacon is barely distinguishable at this vibration level.`;
+  }
+  if (contrast < 45) {
+    return `This frame's upper signal is only ${contrast} grayscale levels above its median background: the beacon is faint and spatially spread under this scenario.`;
+  }
+  return `This frame has ${contrast} grayscale levels of upper-signal contrast, but the beacon is exposure-spread rather than the compact event cluster shown alongside it.`;
+}
+
+function ComparisonHighlight({
+  comparison,
+}: {
+  comparison: { baseline: ControlComparisonSide; disturbance_armed: ControlComparisonSide };
+}) {
+  const rmsImprovement = percentImprovement(
+    comparison.baseline.rms_error_px,
+    comparison.disturbance_armed.rms_error_px
+  );
+  const settleImprovement =
+    comparison.baseline.settle_time_s !== null && comparison.disturbance_armed.settle_time_s !== null
+      ? percentImprovement(comparison.baseline.settle_time_s, comparison.disturbance_armed.settle_time_s)
+      : null;
+  const maxRms = Math.max(comparison.baseline.rms_error_px, comparison.disturbance_armed.rms_error_px, 0.01);
+
+  return (
+    <div className="mb-5 border-b border-panel-border pb-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-dim">Disturbance-armed outcome</p>
+          <p className="mt-1 text-3xl font-medium tracking-tight text-accent-2">
+            {settleImprovement !== null ? `${settleImprovement.toFixed(0)}% faster` : "Settled first"}
+          </p>
+        </div>
+        <p className="text-xs font-mono text-text-dim">{rmsImprovement.toFixed(0)}% lower RMS error</p>
+      </div>
+      <div className="mt-4 space-y-2.5">
+        <MetricBar label="Fixed gain" value={comparison.baseline.rms_error_px} max={maxRms} color="#ff6a3d" />
+        <MetricBar label="Armed" value={comparison.disturbance_armed.rms_error_px} max={maxRms} color="#4fa6ff" />
+      </div>
+    </div>
+  );
+}
+
+function MetricBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  return (
+    <div className="grid grid-cols-[4.5rem_1fr_auto] items-center gap-2 text-[11px] font-mono">
+      <span className="text-text-dim">{label}</span>
+      <div className="h-1.5 overflow-hidden bg-bg">
+        <div className="h-full" style={{ width: `${(value / max) * 100}%`, background: color }} />
+      </div>
+      <span>{value.toFixed(2)}px</span>
+    </div>
+  );
+}
+
+function percentImprovement(baseline: number, armed: number) {
+  return baseline > 0 ? ((baseline - armed) / baseline) * 100 : 0;
 }

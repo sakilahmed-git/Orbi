@@ -1,15 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #0a0e14;
-  --panel: #10151f;
-  --panel-border: #212a3b;
+  --ink: #0a0e14;
+  --surface: #10151f;
+  --line: #273247;
   --text: #e7ecf4;
-  --text-dim: #8794a8;
-  --accent: #ff6a3d;
-  --accent-2: #4fa6ff;
-  --good: #3ed598;
-  --bad: #ff5d5d;
+  --text-dim: #93a1b5;
+  --signal-blue: #4fa6ff;
+  --signal-orange: #ff6a3d;
+
+  --bg: var(--ink);
+  --panel: var(--surface);
+  --panel-border: var(--line);
+  --accent: var(--signal-orange);
+  --accent-2: var(--signal-blue);
+  --good: var(--signal-blue);
+  --bad: var(--signal-orange);
 }
 
 @theme inline {
@@ -34,6 +40,15 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+input[type="number"] {
+  appearance: textfield;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
 }
 
 ::selection {
