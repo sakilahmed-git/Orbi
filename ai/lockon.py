@@ -15,6 +15,71 @@ from __future__ import annotations
 import numpy as np
 
 
+def evaluate_classical_baseline(
+    seed: int = 42,
+    log_path: str = "outputs/logs/section4_classical_baseline.json",
+    plot_path: str = "outputs/plots/section4_classical_failure.png",
+) -> dict:
+    """Run and persist the canonical clean/noisy Section 4 baseline.
+
+    This is deliberately one fixed, reproducible scenario.  The resulting
+    JSON is the sole source for any pitch number describing this comparison.
+    """
+    import json
+    import os
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from core.event_emulator import add_sensor_noise_events, frames_to_events
+    from core.scene_gen import TurbulenceParams, VibrationParams, generate_scene
+
+    frames, gt = generate_scene(
+        duration_s=1.0, fps=200, blink_freq_hz=20.0,
+        vibration=VibrationParams(components=[(15.0, 2.5, 0.0)], broadband_std_px=0.4),
+        turbulence=TurbulenceParams(strength=0.35, correlation_time_s=0.05),
+        background_clutter_level=0.3, frame_size=(128, 128), seed=seed,
+    )
+    clean_events = frames_to_events(frames, fps=gt.fps, threshold=0.15)
+    noisy_events = add_sensor_noise_events(
+        clean_events, tuple(gt.frame_size), gt.duration_s, rate_hz_per_pixel=5.0, seed=seed
+    )
+    truth = [gt.true_xy[min(int(i * 0.05 * gt.fps), len(gt.true_xy) - 1)] for i in range(20)]
+    clean = lock_on(clean_events, tuple(gt.frame_size), gt.blink_freq_hz)
+    noisy = lock_on(noisy_events, tuple(gt.frame_size), gt.blink_freq_hz)
+    result = {
+        "method": "classical_grid_fft_lock_on",
+        "scenario": {"seed": seed, "duration_s": 1.0, "fps": 200, "blink_freq_hz": 20.0,
+                     "vibration_frequency_hz": 15.0, "vibration_amplitude_px": 2.5,
+                     "sensor_noise_rate_hz_per_px": 5.0},
+        "clean": summarize_detections(clean, truth),
+        "noisy": summarize_detections(noisy, truth),
+        "plot": plot_path,
+    }
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    os.makedirs(os.path.dirname(plot_path), exist_ok=True)
+    with open(log_path, "w") as f:
+        json.dump(result, f, indent=2)
+
+    plt.figure(figsize=(7, 5))
+    xy = np.asarray(gt.true_xy)
+    plt.plot(xy[:, 0], xy[:, 1], "k-", label="injected beacon trace")
+    for label, detections, color in [("classical clean", clean, "tab:green"),
+                                     ("classical + sensor noise", noisy, "tab:red")]:
+        points = np.asarray([[d["x"], d["y"]] for d in detections if d is not None])
+        if points.size:
+            plt.scatter(points[:, 0], points[:, 1], s=25, label=label, c=color)
+    plt.gca().invert_yaxis()
+    plt.axis("equal")
+    plt.xlabel("x (px)")
+    plt.ylabel("y (px)")
+    plt.title("Section 4 classical baseline — fixed seed 42")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(plot_path, dpi=160)
+    plt.close()
+    return result
+
+
 def lock_on(events: np.ndarray, frame_size: tuple, blink_freq_hz: float,
             window_s: float = 0.05, grid_size: int = 8,
             min_events: int = 5, freq_tolerance: float = 0.35,
@@ -144,3 +209,4 @@ if __name__ == "__main__":
     dets_noisy = lock_on(noisy_events, frame_size, blink_hz)
     summary_noisy = summarize_detections(dets_noisy, true_at_windows)
     print(summary_noisy)
+    print("Persisted baseline:", evaluate_classical_baseline())

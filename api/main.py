@@ -95,6 +95,7 @@ from pydantic import BaseModel
 from ai.control_loop import _interpolate_detections, run_control_comparison
 from ai.discriminator import discriminate_lock_on, load_discriminator
 from ai.disturbance import estimate_vibration_psd, track_centroid_trace
+from ai.lockon import lock_on
 from core.event_emulator import add_sensor_noise_events, frames_to_events, frames_to_frame_camera
 from core.scene_gen import TurbulenceParams, VibrationParams, generate_scene
 
@@ -134,17 +135,26 @@ class ScenarioRequest(BaseModel):
     frame_size: tuple[int, int] = (128, 128)
     seed: int = 812
     scintilla_enabled: bool = True
+    range_km: float = 1000.0
+    angular_offset_deg: float = 0.0
+    acquisition_cone_px: float = 64.0
 
 
 def _run_full_pipeline(req: ScenarioRequest):
     """One shared implementation used by both /run-scenario and /stream, so the two
     endpoints can never silently disagree about what the pipeline does."""
+    # Range changes apparent image motion and sensor-noise burden; orientation
+    # shifts the beacon inside the acquisition cone. These are explicit
+    # simulation inputs, not UI-only decorations.
+    range_scale = 1000.0 / max(req.range_km, 100.0)
+    cone = float(np.clip(req.acquisition_cone_px, 16.0, 128.0))
+    center = 64.0 + np.clip(req.angular_offset_deg / 8.0 * cone, -cone / 2, cone / 2)
     frames, gt = generate_scene(
         duration_s=req.duration_s,
         fps=req.fps,
         blink_freq_hz=req.blink_freq_hz,
         vibration=VibrationParams(
-            components=[(req.vibration_freq_hz, req.vibration_amp_px, req.vibration_phase)],
+            components=[(req.vibration_freq_hz, req.vibration_amp_px * range_scale, req.vibration_phase)],
             broadband_std_px=req.broadband_std_px,
         ),
         turbulence=TurbulenceParams(
@@ -153,11 +163,12 @@ def _run_full_pipeline(req: ScenarioRequest):
         ),
         background_clutter_level=req.clutter_level,
         frame_size=tuple(req.frame_size),
+        beacon_base_xy=(center, 64.0),
         seed=req.seed,
     )
     clean = frames_to_events(frames, fps=gt.fps, threshold=0.15)
     noisy = add_sensor_noise_events(clean, tuple(gt.frame_size), gt.duration_s,
-                                     rate_hz_per_pixel=req.noise_rate_hz_per_px, seed=req.seed)
+                                     rate_hz_per_pixel=req.noise_rate_hz_per_px / max(range_scale, 0.1), seed=req.seed)
     blurred, blurred_fps = frames_to_frame_camera(frames, fps_in=req.fps, target_fps=30,
                                                     exposure_fraction=1.0)
     model = get_model()
@@ -178,7 +189,38 @@ def _run_full_pipeline(req: ScenarioRequest):
 
     return dict(frames=frames, gt=gt, clean=clean, noisy=noisy, blurred=blurred, blurred_fps=blurred_fps,
                 detections=detections, disturbance=disturbance, times=times, true_xy=true_xy,
-                measured_xy=measured_xy, comparison=comparison)
+                 measured_xy=measured_xy, comparison=comparison)
+
+
+@app.post("/compare")
+def compare_scenario(req: ScenarioRequest):
+    """Run classical, event-only and learned/armed paths on identical events."""
+    r = _run_full_pipeline(req)
+    gt, times, noisy = r["gt"], r["times"], r["noisy"]
+    classical = lock_on(noisy, tuple(gt.frame_size), gt.blink_freq_hz)
+    learned = r["detections"]
+    true_xy = r["true_xy"]
+    classical_xy = _interpolate_detections(classical, times, true_xy)
+    learned_xy = r["measured_xy"]
+    start_offset = np.array([15.0, -12.0])
+    classical_control = run_control_comparison(
+        classical_xy, true_xy, times, r["disturbance"], start_offset, scintilla_enabled=False
+    )
+    event_only = run_control_comparison(
+        learned_xy, true_xy, times, r["disturbance"], start_offset, scintilla_enabled=False
+    )
+    scintilla = r["comparison"]
+    def pack(comparison, trace_key, label):
+        trace = comparison[trace_key]
+        return {"label": label, "rms_error_px": float(np.sqrt(np.mean(trace ** 2))),
+                "p95_error_px": float(np.percentile(trace, 95)),
+                "trace": {"t": _subsample(times.tolist()), "error_px": _subsample(trace.tolist())}}
+    return {"scenario": req.model_dump(),
+            "classical_frame_baseline": pack(classical_control, "_baseline_trace", "Classical / frame baseline"),
+            "event_only_no_ai": pack(event_only, "_baseline_trace", "Event-only / classical lock-on"),
+            "scintilla": pack(scintilla, "_armed_trace", "Scintilla / learned + armed control"),
+            "envelope_point": {"vibration_amp_px": req.vibration_amp_px, "clutter_level": req.clutter_level},
+            "data_source": "synthetic", "validation_label": "SIMULATION — synthetic scenario"}
 
 
 def _detections_to_points(detections) -> list[dict]:

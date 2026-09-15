@@ -17,6 +17,9 @@ export interface ScenarioRequest {
   seed?: number;
   /** Selects fixed-gain conventional PAT/ATP vs the existing disturbance-informed controller. */
   scintilla_enabled?: boolean;
+  range_km?: number;
+  angular_offset_deg?: number;
+  acquisition_cone_px?: number;
 }
 
 export interface DetectionPoint {
@@ -84,6 +87,23 @@ export async function fetchEnvelopeSweep(): Promise<EnvelopeSweepResponse> {
   if (!res.ok) {
     throw new Error(`envelope-sweep failed (${res.status})`);
   }
+  return res.json();
+}
+
+export interface ComparePath { label: string; rms_error_px: number; p95_error_px: number; trace: { t: number[]; error_px: number[] } }
+export interface CompareResponse {
+  scenario: Required<ScenarioRequest>;
+  classical_frame_baseline: ComparePath;
+  event_only_no_ai: ComparePath;
+  scintilla: ComparePath;
+  envelope_point: { vibration_amp_px: number; clutter_level: number };
+  data_source: "synthetic";
+  validation_label: string;
+}
+
+export async function compareScenario(body: ScenarioRequest): Promise<CompareResponse> {
+  const res = await fetch(`${API_BASE}/compare`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`compare failed (${res.status}): ${await res.text()}`);
   return res.json();
 }
 

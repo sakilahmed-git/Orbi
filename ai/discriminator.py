@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 import joblib
+import sklearn
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -226,7 +227,12 @@ def train_discriminator(model_path: str = "outputs/models/discriminator_gbc.jobl
     y_pred = clf.predict(x_test)
 
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
-    joblib.dump({"model": clf, "feature_names": FEATURE_NAMES}, model_path)
+    # Write atomically so an interrupted retrain never removes the last known
+    # good artifact. The version tag is checked at load time by the API.
+    tmp_path = f"{model_path}.tmp"
+    joblib.dump({"model": clf, "feature_names": FEATURE_NAMES,
+                 "sklearn_version": sklearn.__version__}, tmp_path)
+    os.replace(tmp_path, model_path)
     metrics = {
         "n_samples": int(len(y)),
         "positive_rate": float(y.mean()),
@@ -237,7 +243,14 @@ def train_discriminator(model_path: str = "outputs/models/discriminator_gbc.jobl
 
 
 def load_discriminator(model_path: str = "outputs/models/discriminator_gbc.joblib"):
-    return joblib.load(model_path)["model"]
+    artifact = joblib.load(model_path)
+    saved_version = artifact.get("sklearn_version")
+    if saved_version != sklearn.__version__:
+        raise RuntimeError(
+            f"discriminator artifact sklearn={saved_version or 'unknown'}; runtime sklearn={sklearn.__version__}. "
+            "Retrain with the pinned requirements before serving results."
+        )
+    return artifact["model"]
 
 
 def discriminate_lock_on(

@@ -33,7 +33,14 @@ export function useMissionSimulation() {
     const conventionalScan = [Math.cos(e.t * 2.2) * .55, .2 + Math.sin(e.t * 1.6) * .4, Math.sin(e.t * 2.2) * .55] as Vec3;
     const scan = e.phase === "SEARCH" && !(config.current.intelligence && e.ghost) ? conventionalScan : desired;
     const gain = config.current.gain * (e.adaptive && config.current.intelligence ? 2.25 : 1); const disturbedDesired = norm([scan[0], scan[1] + disturbanceWave * .035, scan[2] + Math.cos(e.t * 23) * e.disturbance * .02]);
-    e.pointing = mix(e.pointing, disturbedDesired, clamp(dt * gain * (e.phase === "SEARCH" ? .42 : 1.3)));
+    // ALIGN/TRACK need tighter tracking authority than the earlier coarse phases, because
+    // their transition thresholds are much stricter (0.28deg for ALIGN->TRACK, 0.12deg for
+    // TRACK->CONNECTED) while the target keeps orbiting continuously -- the original single
+    // multiplier (1.3) wasn't enough to reliably close that gap, which is what caused the
+    // reported "stuck on ALIGN" bug.
+    const precisionPhase = e.phase === "ALIGN" || e.phase === "TRACK";
+    const phaseGainMultiplier = e.phase === "SEARCH" ? .42 : precisionPhase ? 2.6 : 1.3;
+    e.pointing = mix(e.pointing, disturbedDesired, clamp(dt * gain * phaseGainMultiplier));
     const error = Math.acos(clamp(dot(e.pointing, desired), -1, 1)) * 180 / Math.PI;
     const distanceKm = len(sub(target, source)) * 130;
     const confidence = confidenceFor(e.phase, phaseAge, error, e.disturbance, e.learned && config.current.intelligence);
@@ -53,15 +60,22 @@ export function useMissionSimulation() {
 
 function advance(e: Engine, age: number, confidence: number, error: number, signal: number, quality: number, intelligence: boolean) {
   const next = (p: MissionPhase) => { e.phase = p; e.phaseAt = e.t; };
+  // Safety watchdog: if a phase with an error-gated transition (ACQUIRE/ALIGN/TRACK) hasn't
+  // satisfied its condition within a generous grace period, gradually relax the required
+  // error threshold rather than freezing indefinitely. Grace period is well beyond the normal
+  // convergence time (~1s) so this never fires under nominal conditions -- it only guards
+  // against edge cases (e.g. an unlucky disturbance phase) where the target's continuous
+  // orbit briefly outruns the controller's convergence rate.
+  const stallRelax = (graceSeconds: number) => age <= graceSeconds ? 1 : 1 + (age - graceSeconds) * 1.5;
   if (e.phase === "SEARCH" && confidence > .28 && age > .45) next("DETECT");
   else if (e.phase === "DETECT" && confidence > .58 && age > .38) next("IDENTIFY");
   else if (e.phase === "IDENTIFY" && confidence > .76 && age > .48) next("LOCK");
   else if (e.phase === "LOCK" && confidence > .82 && age > .32) next("ACQUIRE");
-  else if (e.phase === "ACQUIRE" && error < 3.2 && signal > -38) next("ALIGN");
-  else if (e.phase === "ALIGN" && error < .28 && signal > -34) next("TRACK");
-  else if (e.phase === "TRACK" && error < .12 && age > .55) { next("CONNECTED"); e.connectedAt = e.t; e.learned = true; }
+  else if (e.phase === "ACQUIRE" && error < 3.2 * stallRelax(2.5) && signal > -38) next("ALIGN");
+  else if (e.phase === "ALIGN" && error < .28 * stallRelax(3) && signal > -34) next("TRACK");
+  else if (e.phase === "TRACK" && error < .12 * stallRelax(2) && age > .55) { next("CONNECTED"); e.connectedAt = e.t; e.learned = true; }
   else if (e.phase === "DISTURBANCE" && intelligence && quality < 88 && age > .22) { e.adaptive = true; next("CORRECTING"); }
-  else if (e.phase === "CORRECTING" && error < .16 && age > .4) { e.disturbance *= Math.exp(-age * .7); if (e.disturbance < .06) next("CONNECTED"); }
+  else if (e.phase === "CORRECTING" && error < .16 * stallRelax(3) && age > .4) { e.disturbance *= Math.exp(-age * .7); if (e.disturbance < .06) next("CONNECTED"); }
   else if (e.phase === "DISCONNECTING" && age > .42) next("READY");
 }
 function confidenceFor(phase: MissionPhase, age: number, error: number, disturbance: number, learned: boolean) { if (phase === "READY" || phase === "DISCONNECTING") return 0; const base: Record<MissionPhase, number> = { READY:0, SEARCH:.1, DETECT:.32, IDENTIFY:.6, LOCK:.8, ACQUIRE:.86, ALIGN:.91, TRACK:.96, CONNECTED:.985, DISTURBANCE:.72, CORRECTING:.84, DISCONNECTING:0 }; return clamp(base[phase] + age * .34 + (learned ? .1 : 0) - error * .025 - disturbance * .14); }

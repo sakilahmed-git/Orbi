@@ -1,0 +1,27 @@
+{
+  "method": "classical_grid_fft_lock_on",
+  "scenario": {
+    "seed": 42,
+    "duration_s": 1.0,
+    "fps": 200,
+    "blink_freq_hz": 20.0,
+    "vibration_frequency_hz": 15.0,
+    "vibration_amplitude_px": 2.5,
+    "sensor_noise_rate_hz_per_px": 5.0
+  },
+  "clean": {
+    "n_windows": 20,
+    "n_hits": 20,
+    "hit_rate": 1.0,
+    "mean_position_error_px": 8.539012500576732,
+    "n_scored": 20
+  },
+  "noisy": {
+    "n_windows": 20,
+    "n_hits": 20,
+    "hit_rate": 1.0,
+    "mean_position_error_px": 48.11847573414365,
+    "n_scored": 20
+  },
+  "plot": "outputs/plots/section4_classical_failure.png"
+}
