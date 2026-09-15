@@ -147,7 +147,8 @@ def _settle_time(times: np.ndarray, errors: np.ndarray, threshold_px: float = SE
 
 
 def run_control_comparison(measured_xy: np.ndarray, true_xy: np.ndarray, times: np.ndarray,
-                            disturbance, start_offset: np.ndarray) -> dict:
+                            disturbance, start_offset: np.ndarray,
+                            scintilla_enabled: bool = True) -> dict:
     """Public, reusable core of the baseline-vs-armed comparison, given an already-computed
     measurement trace and disturbance estimate. Used by both the batch evaluation below and
     the FastAPI `/run-scenario` endpoint (Section 9), so both share exactly one implementation."""
@@ -161,6 +162,13 @@ def run_control_comparison(measured_xy: np.ndarray, true_xy: np.ndarray, times: 
     settle_b = _settle_time(times, baseline_err)
     settle_a = _settle_time(times, armed_err)
 
+    selected = armed_err if scintilla_enabled else baseline_err
+    selected_metrics = {
+        "mode": "scintilla_predictive" if scintilla_enabled else "conventional_pat_atp",
+        "rms_error_px": float(np.sqrt(np.mean(selected ** 2))),
+        "p95_error_px": float(np.percentile(selected, 95)),
+        "settle_time_s": settle_a if scintilla_enabled else settle_b,
+    }
     return {
         "start_offset_px": [float(start_offset[0]), float(start_offset[1])],
         "baseline": {
@@ -174,6 +182,7 @@ def run_control_comparison(measured_xy: np.ndarray, true_xy: np.ndarray, times: 
             "settle_time_s": settle_a,
             "kp_track_used": float(kp_track),
         },
+        "selected_control": selected_metrics,
         "_baseline_trace": baseline_err,
         "_armed_trace": armed_err,
     }

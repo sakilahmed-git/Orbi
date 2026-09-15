@@ -3,10 +3,11 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import type { MissionSnapshot, Vec3 } from "@/lib/useMissionSimulation";
 
 type View = "mission" | "terminal-a" | "terminal-b";
 
-export default function MissionSpace({ connected, acquiring, disturbed, ground, view }: { connected: boolean; acquiring: boolean; disturbed: boolean; ground: boolean; view: View }) {
+export default function MissionSpace({ simulation, ground, view }: { simulation: MissionSnapshot; ground: boolean; view: View }) {
   return <Canvas dpr={[1, 2]} camera={{ position: [0, 6.5, 18], fov: 43 }} gl={{ antialias: true }}>
     <color attach="background" args={["#020817"]} />
     <fog attach="fog" args={["#020817", 16, 42]} />
@@ -16,9 +17,10 @@ export default function MissionSpace({ connected, acquiring, disturbed, ground, 
     <CameraRig view={view} />
     <Starfield />
     <OrbitPath />
-    <EndpointSystem side="a" disturbed={disturbed} />
-    {ground ? <GroundStation /> : <EndpointSystem side="b" disturbed={disturbed} />}
-    {(connected || acquiring) && <OpticalLink ground={ground} disturbed={disturbed} acquiring={acquiring} />}
+    <EndpointSystem side="a" position={simulation.source} axis={simulation.currentAxis} disturbance={simulation.disturbance} />
+    {ground ? <GroundStation position={simulation.target} /> : <EndpointSystem side="b" position={simulation.target} axis={simulation.desiredAxis} disturbance={simulation.disturbance} />}
+    {(simulation.phase !== "READY" && simulation.phase !== "DISCONNECTING") && <OpticalLink simulation={simulation} />}
+    {simulation.ghost && <GhostMarker position={simulation.ghost} />}
     <gridHelper args={[42, 42, "#17355e", "#0c1d3d"]} position={[0, -5, 0]} />
   </Canvas>;
 }
@@ -52,9 +54,9 @@ function OrbitPath() {
   return <primitive object={line} />;
 }
 
-function EndpointSystem({ side, disturbed }: { side: "a" | "b"; disturbed: boolean }) {
-  const group = useRef<THREE.Group>(null); const x = side === "a" ? -6.1 : 6.1;
-  useFrame(({ clock }) => { if (!group.current) return; const t = clock.getElapsedTime(); group.current.position.set(x + Math.sin(t * .42 + (side === "a" ? 0 : 2)) * .8, Math.sin(t * .42 + (side === "a" ? 0 : 2)) * 1.8, Math.cos(t * .42) * 1.15); group.current.rotation.y = t * .12; if (disturbed) { group.current.rotation.z = Math.sin(t * 13) * .035; group.current.rotation.x = Math.cos(t * 17) * .025; } });
+function EndpointSystem({ side, position, axis, disturbance }: { side: "a" | "b"; position: Vec3; axis: Vec3; disturbance: number }) {
+  const group = useRef<THREE.Group>(null);
+  useFrame((_, dt) => { if (!group.current) return; group.current.position.lerp(new THREE.Vector3(...position), 1 - Math.exp(-dt * 8)); group.current.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1,0,0),new THREE.Vector3(...axis)),1-Math.exp(-dt*6)); if (disturbance) { group.current.rotation.z += Math.sin(performance.now()*.017)*disturbance*.003; } });
   return <group ref={group}><Satellite /><Beacon /></group>;
 }
 
@@ -64,8 +66,9 @@ function Satellite() {
 function SolarPanel({ x }: { x: number }) { return <group position={[x, 0, 0]}><mesh><boxGeometry args={[3.8, .95, .08]} /><meshStandardMaterial color="#123a7a" metalness={.7} roughness={.3} emissive="#0b2f75" emissiveIntensity={.55} /></mesh><mesh position={[x > 0 ? -1.95 : 1.95, 0, 0]}><boxGeometry args={[.25, .12, .12]} /><meshStandardMaterial color="#8da5c1" metalness={.8} /></mesh></group> }
 function Beacon() { const light = useRef<THREE.PointLight>(null); useFrame(({ clock }) => { if (light.current) light.current.intensity = 1.2 + Math.sin(clock.getElapsedTime() * 12) * .7; }); return <group position={[2.05, 0, 0]}><mesh><sphereGeometry args={[.16, 20, 20]} /><meshBasicMaterial color="#ff64c1" /></mesh><pointLight ref={light} color="#ff4faf" intensity={2} distance={3.5} /></group> }
 
-function GroundStation() { return <group position={[6.1, -3.7, 0]}><mesh><cylinderGeometry args={[1.55, 1.8, .35, 32]} /><meshStandardMaterial color="#48617b" metalness={.7} /></mesh><mesh position={[0, .7, 0]} rotation={[0, 0, -.55]}><cylinderGeometry args={[.72, .2, 1.4, 30, 1, true]} /><meshStandardMaterial color="#c1d0dd" metalness={.75} /></mesh><pointLight position={[.1, 1.25, 0]} color="#ff4eb7" intensity={2} distance={4} /></group> }
+function GroundStation({ position }: { position: Vec3 }) { return <group position={position}><mesh><cylinderGeometry args={[1.55, 1.8, .35, 32]} /><meshStandardMaterial color="#48617b" metalness={.7} /></mesh><mesh position={[0, .7, 0]} rotation={[0, 0, -.55]}><cylinderGeometry args={[.72, .2, 1.4, 30, 1, true]} /><meshStandardMaterial color="#c1d0dd" metalness={.75} /></mesh><pointLight position={[.1, 1.25, 0]} color="#ff4eb7" intensity={2} distance={4} /></group> }
 
-function OpticalLink({ ground, disturbed, acquiring }: { ground: boolean; disturbed: boolean; acquiring: boolean }) {
-  const beam = useRef<THREE.Mesh>(null); useFrame(({ clock }) => { if (!beam.current) return; const t = clock.getElapsedTime(); const a = new THREE.Vector3(-5.3 + Math.sin(t * .42) * .8, Math.sin(t * .42) * 1.8, Math.cos(t * .42) * 1.15); const b = ground ? new THREE.Vector3(6.1, -2.45, 0) : new THREE.Vector3(5.3 + Math.sin(t * .42 + 2) * .8, Math.sin(t * .42 + 2) * 1.8, Math.cos(t * .42 + 2) * 1.15); if (disturbed) b.y += Math.sin(t * 13) * .3; const middle=a.clone().add(b).multiplyScalar(.5); beam.current.position.copy(middle); beam.current.scale.set(1, a.distanceTo(b), 1); beam.current.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),b.clone().sub(a).normalize()); }); return <mesh ref={beam}><cylinderGeometry args={[acquiring ? .035 : .055, acquiring ? .035 : .055, 1, 10]} /><meshBasicMaterial color="#ff4fb4" transparent opacity={acquiring ? .55 : .85} blending={THREE.AdditiveBlending} /></mesh>;
+function OpticalLink({ simulation }: { simulation: MissionSnapshot }) {
+  const beam = useRef<THREE.Mesh>(null); useFrame((_, dt) => { if (!beam.current) return; const a = new THREE.Vector3(...simulation.source).add(new THREE.Vector3(...simulation.currentAxis).multiplyScalar(2.1)); const b = new THREE.Vector3(...simulation.target); const direction=b.clone().sub(a); const middle=a.clone().add(b).multiplyScalar(.5); beam.current.position.lerp(middle,1-Math.exp(-dt*10)); beam.current.scale.set(1,direction.length(),1); beam.current.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction.normalize()); }); const acquiring=!['CONNECTED','DISTURBANCE','CORRECTING','TRACK'].includes(simulation.phase); return <mesh ref={beam}><cylinderGeometry args={[acquiring ? .035 : .055, acquiring ? .035 : .055, 1, 10]} /><meshBasicMaterial color="#ff4fb4" transparent opacity={acquiring ? .4 : .85} blending={THREE.AdditiveBlending} /></mesh>;
 }
+function GhostMarker({ position }: { position: Vec3 }) { return <group position={position}><mesh><sphereGeometry args={[.6,18,18]} /><meshBasicMaterial color="#78a6ff" wireframe transparent opacity={.36} /></mesh><pointLight color="#6e9eff" intensity={.7} distance={3} /></group> }

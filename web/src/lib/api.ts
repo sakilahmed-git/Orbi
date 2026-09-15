@@ -15,6 +15,8 @@ export interface ScenarioRequest {
   noise_rate_hz_per_px?: number;
   frame_size?: [number, number];
   seed?: number;
+  /** Selects fixed-gain conventional PAT/ATP vs the existing disturbance-informed controller. */
+  scintilla_enabled?: boolean;
 }
 
 export interface DetectionPoint {
@@ -50,6 +52,7 @@ export interface RunScenarioResponse {
     baseline: ControlComparisonSide;
     disturbance_armed: ControlComparisonSide;
     trace: { t: number[]; baseline_err_px: number[]; armed_err_px: number[] };
+    selected_control: { mode: "conventional_pat_atp" | "scintilla_predictive"; rms_error_px: number; p95_error_px: number; settle_time_s: number | null };
   };
 }
 

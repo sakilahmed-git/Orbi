@@ -133,6 +133,7 @@ class ScenarioRequest(BaseModel):
     noise_rate_hz_per_px: float = 5.0
     frame_size: tuple[int, int] = (128, 128)
     seed: int = 812
+    scintilla_enabled: bool = True
 
 
 def _run_full_pipeline(req: ScenarioRequest):
@@ -170,7 +171,10 @@ def _run_full_pipeline(req: ScenarioRequest):
     measured_xy = _interpolate_detections(detections, times, true_xy)
     start_offset = np.array([15.0, -12.0])  # fixed, representative coarse-alignment offset
 
-    comparison = run_control_comparison(measured_xy, true_xy, times, disturbance, start_offset)
+    comparison = run_control_comparison(
+        measured_xy, true_xy, times, disturbance, start_offset,
+        scintilla_enabled=req.scintilla_enabled,
+    )
 
     return dict(frames=frames, gt=gt, clean=clean, noisy=noisy, blurred=blurred, blurred_fps=blurred_fps,
                 detections=detections, disturbance=disturbance, times=times, true_xy=true_xy,
@@ -234,6 +238,7 @@ def run_scenario(req: ScenarioRequest):
             "start_offset_px": comparison["start_offset_px"],
             "baseline": comparison["baseline"],
             "disturbance_armed": comparison["disturbance_armed"],
+            "selected_control": comparison["selected_control"],
             "trace": {"t": t_sub, "baseline_err_px": baseline_trace, "armed_err_px": armed_trace},
         },
     }
@@ -331,6 +336,7 @@ async def stream(ws: WebSocket):
                 "start_offset_px": comparison["start_offset_px"],
                 "baseline": comparison["baseline"],
                 "disturbance_armed": comparison["disturbance_armed"],
+                "selected_control": comparison["selected_control"],
             },
         })
     except WebSocketDisconnect:
