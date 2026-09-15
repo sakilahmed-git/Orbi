@@ -1,0 +1,22 @@
+{
+  "no_ground_truth_leakage_note": "The estimate path uses noisy events, discriminator detections, short-window event centroids, and Welch PSD only. Ground-truth frequency is used only after estimation to compute the error.",
+  "rows": [
+    {
+      "noise_rate_hz_per_px": 2.0,
+      "injected_frequency_hz": 17.3,
+      "estimated_frequency_hz": 17.499999999999986,
+      "absolute_error_hz": 0.19999999999998508,
+      "confidence": 0.3494839906254588,
+      "n_centroid_samples": 200
+    },
+    {
+      "noise_rate_hz_per_px": 5.0,
+      "injected_frequency_hz": 17.3,
+      "estimated_frequency_hz": 17.499999999999986,
+      "absolute_error_hz": 0.19999999999998508,
+      "confidence": 0.31791404879207286,
+      "n_centroid_samples": 200
+    }
+  ],
+  "plot": "outputs/plots/section6_nonround_frequency_audit.png"
+}

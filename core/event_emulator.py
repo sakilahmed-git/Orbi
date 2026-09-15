@@ -92,6 +92,43 @@ def frames_to_events(frames: np.ndarray, fps: int, threshold: float = 0.15,
     return events
 
 
+def add_sensor_noise_events(events: np.ndarray, frame_shape: tuple,
+                             duration_s: float,
+                             rate_hz_per_pixel: float = 0.5,
+                             seed: int = 0) -> np.ndarray:
+    """Adds background-activity (BA) noise events: spurious events that
+    real DVS pixels fire even with no scene change, due to dark current /
+    shot noise / junction leakage. This is a well-documented real artifact
+    of event sensors, NOT an artifact of our simulation -- and it matters
+    for the project's honesty: our scene-driven event model (frames_to_events
+    above) is deterministic given the frames, so it produces ZERO events on
+    unchanging background (that's correct DVS behaviour). But that means our
+    synthetic pipeline currently has NO source of confusable noise for a
+    detector to fail against, which would make Section 5's learned
+    discriminator look unmotivated. Real sensor noise is the legitimate,
+    physically-grounded reason a learned model earns its place over a
+    simple matched filter -- not fabricated difficulty.
+
+    rate_hz_per_pixel: expected noise events per second per pixel. Real
+    Prophesee sensors report figures on the order of ~0.1-1 Hz/pixel
+    background activity depending on bias tuning -- this is a tunable
+    knob, not a hard fact we're claiming as measured.
+    """
+    rng = np.random.default_rng(seed + 1)  # offset from scene seed
+    h, w = frame_shape
+    expected_n = int(rate_hz_per_pixel * h * w * duration_s)
+    if expected_n <= 0:
+        return events
+    nx = rng.integers(0, w, size=expected_n)
+    ny = rng.integers(0, h, size=expected_n)
+    nt = rng.uniform(0, duration_s, size=expected_n)
+    npz = rng.choice([-1.0, 1.0], size=expected_n)
+    noise = np.stack([nx, ny, nt, npz], axis=1)
+    combined = np.concatenate([events, noise], axis=0)
+    combined = combined[np.argsort(combined[:, 2])]
+    return combined
+
+
 def accumulate_events_to_frame(events: np.ndarray, frame_shape: tuple,
                                 t_start: float, t_end: float) -> np.ndarray:
     """Render a window of events into a viewable image for comparison /
