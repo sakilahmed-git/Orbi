@@ -90,6 +90,18 @@ export async function fetchEnvelopeSweep(): Promise<EnvelopeSweepResponse> {
   return res.json();
 }
 
+export interface VerifiedResults {
+  learned_mean_error_px: number;
+  classical_mean_error_px: number;
+  n_scenarios: number;
+}
+
+export async function fetchVerifiedResults(): Promise<VerifiedResults> {
+  const res = await fetch(`${API_BASE}/verified-results`);
+  if (!res.ok) throw new Error(`verified-results failed (${res.status})`);
+  return res.json();
+}
+
 export interface ComparePath { label: string; rms_error_px: number; p95_error_px: number; trace: { t: number[]; error_px: number[] } }
 export interface CompareResponse {
   scenario: Required<ScenarioRequest>;

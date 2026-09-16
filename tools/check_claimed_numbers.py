@@ -10,8 +10,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-NUMBER = re.compile(r"(?<![\w.])-?\d+\.\d{3,}(?![\w.])")
-TARGETS = [ROOT / "README.md", ROOT / "AUDIT_REPORT.md", ROOT / "docs", ROOT / "web" / "src"]
+NUMBER = re.compile(r"(?<![\w.])-?\d+\.\d+(?![\w.])(?=\s*(?:px|Hz|%|ms)\b)")
+# The audit is evidence about prior claims, not a current pitch/document claim.
+TARGETS = [ROOT / "README.md", ROOT / "SCINTILLA_BUILD_PLAN.md", ROOT / "docs", ROOT / "web" / "src"]
 EXTENSIONS = {".md", ".tsx", ".ts", ".jsx", ".js"}
 
 def values(value):

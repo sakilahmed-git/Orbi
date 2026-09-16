@@ -101,6 +101,7 @@ from core.scene_gen import TurbulenceParams, VibrationParams, generate_scene
 
 DISCRIMINATOR_MODEL_PATH = "outputs/models/discriminator_gbc.joblib"
 ENVELOPE_HEATMAP_PATH = "outputs/logs/section7_heatmap_grid.json"
+HELDOUT_GENERALIZATION_PATH = "outputs/logs/section5_heldout_generalization.json"
 
 app = FastAPI(title="Scintilla API", version="0.1.0")
 app.add_middleware(
@@ -240,6 +241,18 @@ def _subsample(arr: list, max_points: int = 400) -> list:
 @app.get("/")
 def root():
     return {"service": "scintilla-api", "endpoints": ["/run-scenario (POST)", "/envelope-sweep (GET)", "/stream (WS)"]}
+
+
+@app.get("/verified-results")
+def verified_results():
+    """Return displayable held-out aggregates from the durable result log."""
+    with open(HELDOUT_GENERALIZATION_PATH) as f:
+        summary = json.load(f)["summary"]
+    return {
+        "learned_mean_error_px": summary["learned_mean_error_px_mean"],
+        "classical_mean_error_px": summary["classical_mean_error_px_mean"],
+        "n_scenarios": summary["n_scenarios"],
+    }
 
 
 @app.post("/run-scenario")
