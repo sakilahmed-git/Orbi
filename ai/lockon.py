@@ -19,6 +19,7 @@ def evaluate_classical_baseline(
     seed: int = 42,
     log_path: str = "outputs/logs/section4_classical_baseline.json",
     plot_path: str = "outputs/plots/section4_classical_failure.png",
+    persist: bool = True,
 ) -> dict:
     """Run and persist the canonical clean/noisy Section 4 baseline.
 
@@ -55,10 +56,11 @@ def evaluate_classical_baseline(
         "noisy": summarize_detections(noisy, truth),
         "plot": plot_path,
     }
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    os.makedirs(os.path.dirname(plot_path), exist_ok=True)
-    with open(log_path, "w") as f:
-        json.dump(result, f, indent=2)
+    if persist:
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        os.makedirs(os.path.dirname(plot_path), exist_ok=True)
+        with open(log_path, "w") as f:
+            json.dump(result, f, indent=2)
 
     plt.figure(figsize=(7, 5))
     xy = np.asarray(gt.true_xy)
@@ -75,7 +77,8 @@ def evaluate_classical_baseline(
     plt.title("Section 4 classical baseline — fixed seed 42")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(plot_path, dpi=160)
+    if persist:
+        plt.savefig(plot_path, dpi=160)
     plt.close()
     return result
 
