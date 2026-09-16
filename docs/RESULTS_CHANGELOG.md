@@ -10,6 +10,8 @@ explicitly marked audit discrepancies, not as current result claims.
 | 8.539012500576732 px (clean) | 8.539012500576732 px (clean) | Fresh fixed-seed 42 invocation of `ai.lockon.evaluate_classical_baseline`; persisted at `outputs/logs/section4_classical_baseline.json` | NEWLY VERIFIED |
 | 48.11847573414365 px (noisy) | 48.11847573414365 px (noisy) | Same fresh fixed-seed 42 invocation; plot regenerated at `outputs/plots/section4_classical_failure.png` | NEWLY VERIFIED |
 | Seed-7 harness check | 7.969880502427609 px clean; 52.38281256416269 px noisy | Fresh `evaluate_classical_baseline(seed=7)` invocation, persisted in `outputs/logs/section4_classical_baseline_seed7.json` | REPRODUCTION CONTROL |
+| Discriminator pickle treated as sklearn-1.8.0 compatible | Existing artifact was serialized by sklearn 1.9.0 and emitted compatibility warnings; retrained artifact declares 1.8.0 and loads warning-free under the pin | Fresh load with `InconsistentVersionWarning` promoted to error, plus `tools/check_model_version.py`; model reserialized 2026-09-16 | CORRECTED |
+| Phase 2 comparison not independently evidenced | 5.580439998539663 px frame baseline; 15.345482274996947 px event-only; 5.446402091379099 px full Scintilla | Fresh FastAPI `POST /compare`, seed 812, persisted verbatim in `outputs/logs/phase2_compare_seed812.json` on 2026-09-16 | NEWLY VERIFIED, SYNTHETIC |
 
 The Section 4 run uses seed 42, 1 s at 200 fps, a 20 Hz beacon, 15 Hz / 2.5 px
 vibration, and 5.0 Hz/pixel sensor noise. It is deterministic by design.

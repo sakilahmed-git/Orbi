@@ -1,0 +1,18 @@
+name: Verification
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend-evidence:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r requirements.txt
+      - run: python tools/check_model_version.py
+      - run: python tools/check_claimed_numbers.py
+      - run: python -m unittest discover -s tests
