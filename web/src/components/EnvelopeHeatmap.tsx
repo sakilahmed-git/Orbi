@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchEnvelopeSweep, EnvelopeSweepResponse } from "@/lib/api";
 
-function colorFor(p: number): string {
+export function colorFor(p: number): string {
   // Absence/failure is orange; present/high-confidence acquisition is signal blue.
   const r = Math.round(255 * (1 - p) + 79 * p);
   const g = Math.round(106 * (1 - p) + 166 * p);

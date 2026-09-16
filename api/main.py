@@ -190,7 +190,23 @@ def _run_full_pipeline(req: ScenarioRequest):
 
     return dict(frames=frames, gt=gt, clean=clean, noisy=noisy, blurred=blurred, blurred_fps=blurred_fps,
                 detections=detections, disturbance=disturbance, times=times, true_xy=true_xy,
-                 measured_xy=measured_xy, comparison=comparison)
+                measured_xy=measured_xy, comparison=comparison)
+
+
+def _frame_camera_measurements(blurred: np.ndarray, fps: int, times: np.ndarray,
+                               noise_rate_hz_per_px: float, seed: int) -> np.ndarray:
+    """Non-AI conventional-camera peak tracker over exposure-averaged frames."""
+    if not len(blurred):
+        return np.zeros((len(times), 2))
+    rng = np.random.default_rng(seed + 2)
+    points = []
+    for frame in blurred:
+        observed = np.clip(frame + rng.normal(0.0, 0.005 * noise_rate_hz_per_px, frame.shape), 0.0, 1.0)
+        y, x = np.unravel_index(np.argmax(observed), observed.shape)
+        points.append((float(x), float(y)))
+    frame_times = np.arange(len(points), dtype=float) / fps
+    point_array = np.asarray(points)
+    return np.column_stack([np.interp(times, frame_times, point_array[:, axis]) for axis in (0, 1)])
 
 
 @app.post("/compare")
@@ -198,17 +214,19 @@ def compare_scenario(req: ScenarioRequest):
     """Run classical, event-only and learned/armed paths on identical events."""
     r = _run_full_pipeline(req)
     gt, times, noisy = r["gt"], r["times"], r["noisy"]
-    classical = lock_on(noisy, tuple(gt.frame_size), gt.blink_freq_hz)
+    frame_xy = _frame_camera_measurements(r["blurred"], r["blurred_fps"], times,
+                                           req.noise_rate_hz_per_px, req.seed)
+    event_only_detections = lock_on(noisy, tuple(gt.frame_size), gt.blink_freq_hz)
     learned = r["detections"]
     true_xy = r["true_xy"]
-    classical_xy = _interpolate_detections(classical, times, true_xy)
+    event_only_xy = _interpolate_detections(event_only_detections, times, true_xy)
     learned_xy = r["measured_xy"]
     start_offset = np.array([15.0, -12.0])
     classical_control = run_control_comparison(
-        classical_xy, true_xy, times, r["disturbance"], start_offset, scintilla_enabled=False
+        frame_xy, true_xy, times, r["disturbance"], start_offset, scintilla_enabled=False
     )
     event_only = run_control_comparison(
-        learned_xy, true_xy, times, r["disturbance"], start_offset, scintilla_enabled=False
+        event_only_xy, true_xy, times, r["disturbance"], start_offset, scintilla_enabled=False
     )
     scintilla = r["comparison"]
     def pack(comparison, trace_key, label):
@@ -217,7 +235,7 @@ def compare_scenario(req: ScenarioRequest):
                 "p95_error_px": float(np.percentile(trace, 95)),
                 "trace": {"t": _subsample(times.tolist()), "error_px": _subsample(trace.tolist())}}
     return {"scenario": req.model_dump(),
-            "classical_frame_baseline": pack(classical_control, "_baseline_trace", "Classical / frame baseline"),
+            "classical_frame_baseline": pack(classical_control, "_baseline_trace", "Classical / frame-camera baseline"),
             "event_only_no_ai": pack(event_only, "_baseline_trace", "Event-only / classical lock-on"),
             "scintilla": pack(scintilla, "_armed_trace", "Scintilla / learned + armed control"),
             "envelope_point": {"vibration_amp_px": req.vibration_amp_px, "clutter_level": req.clutter_level},
